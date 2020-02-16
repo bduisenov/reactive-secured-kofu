@@ -1,9 +1,11 @@
 package org.kotlinlang.boot.reactivesecuredkofu
 
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Nested
-import org.junit.jupiter.api.Test
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.*
+import org.kotlinlang.boot.reactivesecuredkofu.repository.UserEntity
+import org.kotlinlang.boot.reactivesecuredkofu.repository.UserRepository
+import org.kotlinlang.boot.reactivesecuredkofu.repository.UserRepositoryImpl
+import org.springframework.beans.factory.getBean
 import org.springframework.context.ConfigurableApplicationContext
 import org.springframework.http.HttpHeaders.LOCATION
 import org.springframework.http.MediaType
@@ -22,6 +24,8 @@ class ApplicationTests {
 
     private lateinit var context: ConfigurableApplicationContext
 
+    private lateinit var repository: UserRepository
+
     private val postgresqlContainer: PostgreSQLContainer<*> = PostgreSQLContainer<Nothing>()
             .apply {
                 withDatabaseName("postgres")
@@ -38,6 +42,12 @@ class ApplicationTests {
         System.setProperty("postgres.port", postgresPort.toString())
 
         context = app.run(profiles = "test")
+        repository = context.getBean<UserRepositoryImpl>()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        runBlocking { repository.deleteAll() }
     }
 
     @Nested
@@ -68,15 +78,25 @@ class ApplicationTests {
 
         @Test
         fun `when a valid id is given then returns a user`() {
+            val id = runBlocking { repository.save(UserEntity(name = "Monika")).id }
+
             val expectedJson = """{ "name": "Monika" }""".trimIndent()
 
             client.get()
-                    .uri("$endpoint/1")
+                    .uri("$endpoint/$id")
                     .exchange()
                     .expectStatus().is2xxSuccessful
                     .expectHeader().contentType(MediaType.APPLICATION_JSON)
                     .expectBody()
                     .json(expectedJson)
+        }
+
+        @Test
+        fun `when an invalid id is given then returns badRequest`() {
+            client.get()
+                    .uri("$endpoint/1")
+                    .exchange()
+                    .expectStatus().isBadRequest
         }
 
         @Test
@@ -89,6 +109,15 @@ class ApplicationTests {
                     .exchange()
                     .expectStatus().is2xxSuccessful
                     .expectHeader().exists(LOCATION)
+        }
+
+        @Test
+        fun `when an invalid json is given then returns badRequest`() {
+            client.post().uri(endpoint)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue("""{"some": "value"}"""))
+                    .exchange()
+                    .expectStatus().isBadRequest
         }
     }
 
