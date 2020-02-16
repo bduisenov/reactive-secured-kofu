@@ -10,6 +10,7 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.client.ExchangeFilterFunctions.basicAuthentication
+import org.testcontainers.containers.PostgreSQLContainer
 
 class ApplicationTests {
 
@@ -21,9 +22,21 @@ class ApplicationTests {
 
     private lateinit var context: ConfigurableApplicationContext
 
+    private val postgresqlContainer: PostgreSQLContainer<*> = PostgreSQLContainer<Nothing>()
+            .apply {
+                withDatabaseName("postgres")
+                withUsername("postgres")
+                withPassword("postgres")
+                withExposedPorts(5432)
+                withInitScript("docker-entrypoint-initdb.d/schema.sql")
+            }
 
     @BeforeAll
     fun beforeAll() {
+        postgresqlContainer.start()
+        val postgresPort = postgresqlContainer.getMappedPort(5432)
+        System.setProperty("postgres.port", postgresPort.toString())
+
         context = app.run(profiles = "test")
     }
 
@@ -67,7 +80,7 @@ class ApplicationTests {
         }
 
         @Test
-        internal fun `when a valid json is given then returns the id of a created resource`() {
+        fun `when a valid json is given then returns the id of a created resource`() {
             val json = """{ "name": "Monika" }""".trimIndent()
 
             client.post().uri(endpoint)
@@ -82,6 +95,7 @@ class ApplicationTests {
     @AfterAll
     fun afterAll() {
         context.close()
+        postgresqlContainer.close()
     }
 
 }
