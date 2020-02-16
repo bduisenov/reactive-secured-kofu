@@ -1,11 +1,24 @@
 package org.kotlinlang.boot.reactivesecuredkofu
 
-import org.springframework.boot.autoconfigure.SpringBootApplication
-import org.springframework.boot.runApplication
+import org.kotlinlang.boot.reactivesecuredkofu.controller.UserControllerImpl
+import org.springframework.boot.WebApplicationType
+import org.springframework.fu.kofu.application
+import org.springframework.fu.kofu.webflux.webFlux
+import reactor.blockhound.BlockHound
+import reactor.tools.agent.ReactorDebugAgent
 
-@SpringBootApplication
-class Application
+val app = application(WebApplicationType.REACTIVE) {
+    webFlux { codecs { jackson { indentOutput = true } } }
+    enable(securityConfig)
+    beans {
+        bean(::routes)
+        bean<UserControllerImpl>()
+    }
+}
 
 fun main(args: Array<String>) {
-    runApplication<Application>(*args)
+    BlockHound.install()
+    ReactorDebugAgent.init()
+
+    app.run(args)
 }
